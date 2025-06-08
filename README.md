@@ -312,90 +312,199 @@ reply_path = resource_path("reply.txt")
 
 ## 五、使用 Docker 运行项目
 
-### 5.1 . **构建 Docker 镜像 或者拉取镜像**：
-```
-    docker build -t bot .
-```
-OR：
-```
-docker pull lee0692/bot:latest
+### 5.1 构建 Docker 镜像
+
+首先确保你已经安装了Docker，然后在项目根目录下执行以下命令构建镜像：
+
+```bash
+# 构建本地镜像
+docker build -t linux-do-bot:latest .
 ```
 
-### 5.2. **更新包列表并安装依赖**:
-```
-sudo apt-get update
-sudo apt-get install -y --fix-missing \
-    libgtk-3-0 \
-    libasound2 \
-    libx11-6 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxext6 \
-    libxfixes3 \
-    libxrandr2 \
-    libxrender1 \
-    libxtst6 \
-    libfreetype6 \
-    libfontconfig1 \
-    libpangocairo-1.0-0 \
-    libpango-1.0-0 \
-    libatk1.0-0 \
-    libcairo2 \
-    libgdk-pixbuf2.0-0 \
-    libglib2.0-0 \
-    libdbus-1-3 \
-    libxcb1 \
-    libxi6 && \
-    rm -rf /var/lib/apt/lists/*
+### 5.2 使用 Docker Compose（推荐）
+
+#### 快速开始
+
+1. **准备配置文件**：
+```bash
+# 复制环境变量模板
+cp .env.example .env
+
+# 编辑配置文件
+vim .env
 ```
 
-### 5.3. **运行 Docker 容器**：
-```
-    docker run -d --name bot-container \
-      -e LINUXDO_USERNAME=your_username \
-      -e LINUXDO_PASSWORD=your_password \
-      -e LIKE_PROBABILITY=0.5 \
-      -e REPLY_PROBABILITY=0.5 \
-      -e COLLECT_PROBABILITY=0.5 \
-      -e MAX_TOPICS=10 \
-      -e USE_WXPUSHER=false \
-      -e APP_TOKEN=your_app_token \
-      -e TOPIC_ID=your_topic_id \
-      bot
+2. **准备外挂配置目录**：
+```bash
+# 创建外挂配置和日志目录
+mkdir -p config logs
+
+# 如果需要自定义config.ini，复制并编辑
+cp config/config.ini ./config/config.ini
+vim ./config/config.ini
 ```
 
-   - 替换环境变量的值以匹配你的实际配置。
-   - 你可以通过编辑 `config.ini` 文件来调整配置。
+3. **启动服务**：
+```bash
+# 构建并启动定时任务容器
+docker-compose up -d
 
-### 5.4. **使用 Docker Compose（可选）**
-- 如果你的项目将来需要更多服务，可以使用 docker-compose.yml 文件来管理多个容器。创建一个 docker-compose.yml 文件，内容示例：
-```
-  version: '3'
-services:
-  app:
-    build: .
-    container_name: bot-container
-    environment:
-      - LINUXDO_USERNAME=your_username
-      - LINUXDO_PASSWORD=your_password
-      - LIKE_PROBABILITY=0.5
-      - REPLY_PROBABILITY=0.5
-      - COLLECT_PROBABILITY=0.5
-      - MAX_TOPICS=10
-      - USE_WXPUSHER=false
-      - APP_TOKEN=your_app_token
-      - TOPIC_ID=your_topic_id
-    command: python main.py
-```
-- 然后使用 Docker Compose 来构建和运行容器：
-```
-  docker-compose up --build
+# 查看启动日志
+docker-compose logs -f
+
+# 查看容器状态
+docker-compose ps
 ```
 
-### 5.5 其他说明
+#### 配置方式
 
-- **配置文件**：`config.ini` 文件可以通过 Docker Volume 挂载到容器中，以便在运行时修改配置。
-- **时区设置**：默认时区设置为中国时区（Asia/Shanghai）。
+##### 方式一：使用环境变量（推荐新手）
+```bash
+# 编辑 .env 文件
+LINUXDO_USERNAME=your_username
+LINUXDO_PASSWORD=your_password
+LIKE_PROBABILITY=0.02
+USE_WXPUSHER=false
+```
+
+##### 方式二：使用外挂配置文件（推荐高级用户）
+```bash
+# 编辑 ./config/config.ini
+[credentials]
+username = your_username
+password = your_password
+
+[settings]
+like_probability = 0.02
+reply_probability = 0.00
+collect_probability = 0.02
+```
+
+#### 常用命令
+
+```bash
+# 启动服务
+docker-compose up -d
+
+# 停止服务
+docker-compose down
+
+# 重启服务
+docker-compose restart
+
+# 查看日志
+docker-compose logs -f linux-do-bot
+
+# 进入容器调试
+docker-compose exec linux-do-bot /bin/bash
+
+# 立即运行一次（测试用）
+docker-compose --profile test run --rm linux-do-bot-test
+
+# 更新镜像并重启
+docker-compose pull && docker-compose up -d
+
+# 重新构建并启动
+docker-compose up -d --build
+```
+
+#### 高级配置
+
+##### 自定义定时任务
+如果需要修改定时任务频率：
+
+1. 修改 `scripts/crontab` 文件
+2. 重新构建镜像：
+```bash
+docker-compose up -d --build
+```
+
+##### 资源限制
+在 `docker-compose.yml` 中已配置默认资源限制：
+- 内存限制：1GB
+- CPU限制：0.5核
+- 预留内存：256MB
+
+##### 多实例运行
+```yaml
+# 在 docker-compose.yml 中添加
+linux-do-bot-2:
+  extends: linux-do-bot
+  container_name: linux-do-bot-2
+  environment:
+    - LINUXDO_USERNAME=${LINUXDO_USERNAME_2}
+    - LINUXDO_PASSWORD=${LINUXDO_PASSWORD_2}
+```
+
+#### 故障排除
+
+##### 查看详细日志
+```bash
+# 查看容器日志
+docker-compose logs linux-do-bot
+
+# 查看应用日志
+tail -f logs/bot.log
+
+# 实时监控
+docker-compose logs -f --tail=50
+```
+
+##### 配置检查
+```bash
+# 进入容器检查配置
+docker-compose exec linux-do-bot cat /app/config/config.ini
+
+# 检查环境变量
+docker-compose exec linux-do-bot env | grep LINUXDO
+
+# 检查定时任务
+docker-compose exec linux-do-bot crontab -l
+```
+
+##### 重置配置
+```bash
+# 停止服务
+docker-compose down
+
+# 清理配置和日志
+rm -rf config/* logs/*
+
+# 重新启动（会使用默认配置）
+docker-compose up -d
+```
+
+#### 生产环境建议
+
+1. **使用外部卷**：
+```yaml
+volumes:
+  - bot-config:/app/config
+  - bot-logs:/var/log/bot
+```
+
+2. **配置监控**：
+```bash
+# 添加监控脚本
+echo '#!/bin/bash
+if ! docker-compose ps | grep -q "Up"; then
+    docker-compose up -d
+    echo "Bot service restarted at $(date)"
+fi' > monitor.sh
+
+chmod +x monitor.sh
+echo "*/5 * * * * /path/to/monitor.sh" | crontab -
+```
+
+3. **日志轮转**：
+```yaml
+# 在 docker-compose.yml 中添加
+logging:
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+```
 
 ## 六、常见问题
 

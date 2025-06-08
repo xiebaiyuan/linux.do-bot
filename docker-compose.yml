@@ -1,0 +1,148 @@
+version: '3.8'
+
+services:
+  linux-do-bot:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    # 也可以使用预构建镜像
+    # image: your-dockerhub-username/linux-do-bot:latest
+    container_name: linux-do-bot
+    
+    # 环境变量配置 (优先级最高)
+    # 注意：环境变量会覆盖配置文件中的相同配置项
+    environment:
+      # 从.env文件读取，也可以直接在这里设置
+      - LINUXDO_USERNAME=${LINUXDO_USERNAME:-}
+      - LINUXDO_PASSWORD=${LINUXDO_PASSWORD:-}
+      - LIKE_PROBABILITY=${LIKE_PROBABILITY:-0.02}
+      - REPLY_PROBABILITY=${REPLY_PROBABILITY:-0.02}
+      - COLLECT_PROBABILITY=${COLLECT_PROBABILITY:-0.02}
+      - MAX_TOPICS=${MAX_TOPICS:-10}
+      - USE_WXPUSHER=${USE_WXPUSHER:-false}
+      - APP_TOKEN=${APP_TOKEN:-}
+      - TOPIC_ID=${TOPIC_ID:-}
+      - IMMEDIATE_RUN=${IMMEDIATE_RUN:-false}
+      - HOME_URL=${HOME_URL:-}
+      - CONNECT_URL=${CONNECT_URL:-}
+      
+      # 配置文件优先级控制
+      # 设置为 'env' 时，环境变量优先于配置文件
+      # 设置为 'config' 时，配置文件优先于环境变量（如果配置文件中有对应配置）
+      - CONFIG_PRIORITY=${CONFIG_PRIORITY:-env}
+    
+    # 挂载卷
+    volumes:
+      # 外挂配置文件目录 (优先级次于环境变量)
+      - ./config:/app/config:rw
+      # 日志目录
+      - ./logs:/var/log/bot:rw
+      # 可选：挂载自定义脚本
+      # - ./custom-scripts:/app/custom-scripts:ro
+    
+    # 重启策略
+    restart: unless-stopped
+    
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+    
+    # 网络配置
+    networks:
+      - bot-network
+    
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "python"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # 一次性运行版本（用于测试）
+  linux-do-bot-test:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: linux-do-bot-test
+    environment:
+      - LINUXDO_USERNAME=${LINUXDO_USERNAME:-}
+      - LINUXDO_PASSWORD=${LINUXDO_PASSWORD:-}
+      - LIKE_PROBABILITY=${LIKE_PROBABILITY:-0.02}
+      - REPLY_PROBABILITY=${REPLY_PROBABILITY:-0.02}
+      - COLLECT_PROBABILITY=${COLLECT_PROBABILITY:-0.02}
+      - MAX_TOPICS=${MAX_TOPICS:-10}
+      - USE_WXPUSHER=${USE_WXPUSHER:-false}
+      - APP_TOKEN=${APP_TOKEN:-}
+      - TOPIC_ID=${TOPIC_ID:-}
+    volumes:
+      - ./config:/app/config:rw
+      - ./logs:/var/log/bot:rw
+    command: python main.py
+    profiles:
+      - test
+    networks:
+      - bot-network
+
+  # 仅使用配置文件的版本（忽略大部分环境变量）
+  linux-do-bot-config-only:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: linux-do-bot-config-only
+    environment:
+      # 只保留必要的运行时环境变量
+      - IMMEDIATE_RUN=${IMMEDIATE_RUN:-false}
+      - CONFIG_PRIORITY=config
+    volumes:
+      - ./config:/app/config:rw
+      - ./logs:/var/log/bot:rw
+    restart: unless-stopped
+    profiles:
+      - config-only
+    networks:
+      - bot-network
+
+  # 仅使用环境变量的版本（不依赖配置文件）
+  linux-do-bot-env-only:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: linux-do-bot-env-only
+    environment:
+      # 必须设置所有必要的环境变量
+      - LINUXDO_USERNAME=${LINUXDO_USERNAME}
+      - LINUXDO_PASSWORD=${LINUXDO_PASSWORD}
+      - LIKE_PROBABILITY=${LIKE_PROBABILITY:-0.02}
+      - REPLY_PROBABILITY=${REPLY_PROBABILITY:-0.02}
+      - COLLECT_PROBABILITY=${COLLECT_PROBABILITY:-0.02}
+      - MAX_TOPICS=${MAX_TOPICS:-10}
+      - USE_WXPUSHER=${USE_WXPUSHER:-false}
+      - APP_TOKEN=${APP_TOKEN:-}
+      - TOPIC_ID=${TOPIC_ID:-}
+      - IMMEDIATE_RUN=${IMMEDIATE_RUN:-false}
+      - HOME_URL=${HOME_URL:-}
+      - CONNECT_URL=${CONNECT_URL:-}
+      - CONFIG_PRIORITY=env
+    volumes:
+      - ./logs:/var/log/bot:rw
+    restart: unless-stopped
+    profiles:
+      - env-only
+    networks:
+      - bot-network
+
+networks:
+  bot-network:
+    driver: bridge
+
+volumes:
+  bot-logs:
+    driver: local
+  bot-config:
+    driver: local

@@ -13,7 +13,7 @@ from tabulate import tabulate
 from playwright.sync_api import sync_playwright, TimeoutError
 from config import reply_generator
 
-# I stumbled upon this site thinking it might be a promising open-source Linux community. After exploring a bit, it seems like it's still in its early stages and doesn't quite live up to the 'community' label yet. There’s no shortage of overconfident individuals here, but it feels more like an amateurish forum rather than a serious place for Linux enthusiasts.
+# I stumbled upon this site thinking it might be a promising open-source Linux community. After exploring a bit, it seems like it's still in its early stages and doesn't quite live up to the 'community' label yet. There's no shortage of overconfident individuals here, but it feels more like an amateurish forum rather than a serious place for Linux enthusiasts.
 
 # 创建一个 StringIO 对象用于捕获日志
 log_stream = io.StringIO()
@@ -48,6 +48,8 @@ IS_SERVER = platform.system() == "Linux" and not IS_GITHUB_ACTIONS
 # 从配置文件或环境变量中读取配置信息
 def load_config():
     config = ConfigParser()
+    
+    # 确定配置文件路径
     if IS_SERVER:
         config_file = './config/config.ini'
     elif IS_GITHUB_ACTIONS:
@@ -55,24 +57,77 @@ def load_config():
     else:
         config_file = 'config/config.ini'
     
+    # 读取配置文件
     if config_file and os.path.exists(config_file):
         config.read(config_file)
+        logging.info(f"已加载配置文件: {config_file}")
+    else:
+        logging.info("未找到配置文件，仅使用环境变量")
     
     return config
 
+def get_config_value(env_key, config_section, config_key, fallback_value, config_priority='env'):
+    """
+    根据优先级获取配置值
+    config_priority: 'env' 表示环境变量优先, 'config' 表示配置文件优先
+    """
+    env_value = os.getenv(env_key)
+    config_value = config.get(config_section, config_key, fallback=None) if config.has_section(config_section) else None
+    
+    if config_priority == 'env':
+        # 环境变量优先
+        if env_value:
+            logging.debug(f"{env_key}: 使用环境变量值")
+            return env_value
+        elif config_value:
+            logging.debug(f"{env_key}: 使用配置文件值")
+            return config_value
+        else:
+            logging.debug(f"{env_key}: 使用默认值")
+            return fallback_value
+    else:
+        # 配置文件优先
+        if config_value:
+            logging.debug(f"{env_key}: 使用配置文件值")
+            return config_value
+        elif env_value:
+            logging.debug(f"{env_key}: 使用环境变量值")
+            return env_value
+        else:
+            logging.debug(f"{env_key}: 使用默认值")
+            return fallback_value
+
 config = load_config()
 
-USERNAME = os.getenv("LINUXDO_USERNAME", config.get('credentials', 'username', fallback=None))
-PASSWORD = os.getenv("LINUXDO_PASSWORD", config.get('credentials', 'password', fallback=None))
-LIKE_PROBABILITY = float(os.getenv("LIKE_PROBABILITY", config.get('settings', 'like_probability', fallback='0.02')))
-REPLY_PROBABILITY = float(os.getenv("REPLY_PROBABILITY", config.get('settings', 'reply_probability', fallback='0')))
-COLLECT_PROBABILITY = float(os.getenv("COLLECT_PROBABILITY", config.get('settings', 'collect_probability', fallback='0.02')))
-HOME_URL = config.get('urls', 'home_url', fallback="https://linux.do/")
-CONNECT_URL = config.get('urls', 'connect_url', fallback="https://connect.linux.do/")
-USE_WXPUSHER = os.getenv("USE_WXPUSHER", config.get('wxpusher', 'use_wxpusher', fallback='false')).lower() == 'true'
-APP_TOKEN = os.getenv("APP_TOKEN", config.get('wxpusher', 'app_token', fallback=None))
-TOPIC_ID = os.getenv("TOPIC_ID", config.get('wxpusher', 'topic_id', fallback=None))
-MAX_TOPICS = int(os.getenv("MAX_TOPICS", config.get('settings', 'max_topics', fallback='10')))
+# 获取配置优先级设置
+CONFIG_PRIORITY = os.getenv("CONFIG_PRIORITY", "env")
+logging.info(f"配置优先级: {CONFIG_PRIORITY}")
+
+# 使用新的配置获取函数
+USERNAME = get_config_value("LINUXDO_USERNAME", 'credentials', 'username', None, CONFIG_PRIORITY)
+PASSWORD = get_config_value("LINUXDO_PASSWORD", 'credentials', 'password', None, CONFIG_PRIORITY)
+LIKE_PROBABILITY = float(get_config_value("LIKE_PROBABILITY", 'settings', 'like_probability', '0.02', CONFIG_PRIORITY))
+REPLY_PROBABILITY = float(get_config_value("REPLY_PROBABILITY", 'settings', 'reply_probability', '0', CONFIG_PRIORITY))
+COLLECT_PROBABILITY = float(get_config_value("COLLECT_PROBABILITY", 'settings', 'collect_probability', '0.02', CONFIG_PRIORITY))
+HOME_URL = get_config_value("HOME_URL", 'urls', 'home_url', "https://linux.do/", CONFIG_PRIORITY)
+CONNECT_URL = get_config_value("CONNECT_URL", 'urls', 'connect_url', "https://connect.linux.do/", CONFIG_PRIORITY)
+USE_WXPUSHER = get_config_value("USE_WXPUSHER", 'wxpusher', 'use_wxpusher', 'false', CONFIG_PRIORITY).lower() == 'true'
+APP_TOKEN = get_config_value("APP_TOKEN", 'wxpusher', 'app_token', None, CONFIG_PRIORITY)
+TOPIC_ID = get_config_value("TOPIC_ID", 'wxpusher', 'topic_id', None, CONFIG_PRIORITY)
+MAX_TOPICS = int(get_config_value("MAX_TOPICS", 'settings', 'max_topics', '10', CONFIG_PRIORITY))
+
+# 打印最终使用的配置
+logging.info("=== 最终配置信息 ===")
+logging.info(f"用户名: {'已设置' if USERNAME else '未设置'}")
+logging.info(f"密码: {'已设置' if PASSWORD else '未设置'}")
+logging.info(f"点赞概率: {LIKE_PROBABILITY}")
+logging.info(f"回复概率: {REPLY_PROBABILITY}")
+logging.info(f"收藏概率: {COLLECT_PROBABILITY}")
+logging.info(f"最大主题数: {MAX_TOPICS}")
+logging.info(f"使用WxPusher: {USE_WXPUSHER}")
+logging.info(f"主页URL: {HOME_URL}")
+logging.info(f"连接URL: {CONNECT_URL}")
+logging.info("==================")
 
 # 检查必要配置
 missing_configs = []
@@ -113,7 +168,7 @@ class NotificationManager:
                 response = requests.post("https://wxpusher.zjiecode.com/api/send/message", json=data)
 
                 if response.status_code == 200:
-                    request_logger.info("wxpusher 消息发送成功")
+                    request_logger.info("wxpusher 消消息发送成功")
                 else:
                     request_logger.error(f"wxpusher 消息发送失败: {response.status_code}, {response.text}")
                     
@@ -122,15 +177,30 @@ class NotificationManager:
 
 class LinuxDoBrowser:
     def __init__(self) -> None:
+        logging.info("=== 开始初始化浏览器 ===")
         logging.info("启动 Playwright...")
-        self.pw = sync_playwright().start()
-        logging.info("以无头模式启动 Firefox...")
-        self.browser = self.pw.firefox.launch(headless=True)
-        self.context = self.browser.new_context()
-        self.page = self.context.new_page()
-        logging.info(f"导航到 {HOME_URL}...")
-        self.page.goto(HOME_URL)
-        logging.info("初始化完成。")
+        
+        try:
+            self.pw = sync_playwright().start()
+            logging.info("Playwright 启动成功")
+            
+            logging.info("以无头模式启动 Firefox...")
+            self.browser = self.pw.firefox.launch(headless=True, args=['--no-sandbox', '--disable-dev-shm-usage'])
+            logging.info("Firefox 浏览器启动成功")
+            
+            self.context = self.browser.new_context()
+            self.page = self.context.new_page()
+            logging.info("浏览器上下文和页面创建成功")
+            
+            logging.info(f"导航到 {HOME_URL}...")
+            self.page.goto(HOME_URL, timeout=30000)  # 增加超时时间
+            logging.info("页面导航成功")
+            
+        except Exception as e:
+            logging.error(f"浏览器初始化失败: {e}")
+            raise
+            
+        logging.info("=== 浏览器初始化完成 ===")
 
     def load_messages(self, filename):
         """从指定的文件加载消息并返回消息列表。"""

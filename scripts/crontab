@@ -1,0 +1,11 @@
+# 每天凌晨2点运行一次
+0 2 * * * root /app/run-bot.sh
+
+# 每12小时运行一次（可选）
+# 0 */12 * * * root /app/run-bot.sh
+
+# 每6小时运行一次（可选）
+# 0 */6 * * * root /app/run-bot.sh
+
+# 空行（cron要求文件以空行结尾）
+
